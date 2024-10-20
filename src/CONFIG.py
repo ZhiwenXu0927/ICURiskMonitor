@@ -132,8 +132,3 @@ OUTPUT_ITEMID = {'pre_admission':{'ids':[40060,226633],'label':'pre_admission'},
 #Base excess is defined as the amount of strong acid that must be added to each liter of fully oxygenated blood 
 #to return the pH to 7.40 at a temperature of 37°C and a pCO2 of 40 mmHg (5.3 kPa), 
 #while a base deficit (ie. a negative base excess) is defined by the amount of strong base that must be added.
-
-###################
-## model configs ##
-###################
-MODELS = ['gru']
