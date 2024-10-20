@@ -1,3 +1,6 @@
+# References:
+# https://github.com/sindhura97/STraTS
+
 import torch.nn as nn
 import argparse
 from utils import Logger
