@@ -1,3 +1,6 @@
+# References:
+# https://github.com/sindhura97/STraTS
+
 from tqdm import tqdm
 import torch
 from sklearn.metrics import roc_auc_score, precision_recall_curve, auc
