@@ -1,3 +1,6 @@
+# References
+# https://github.com/sindhura97/STraTS
+
 from argparse import Namespace
 from models import TimeSeriesModel
 import torch.nn as nn
