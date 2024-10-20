@@ -2,6 +2,7 @@
 # https://arxiv.org/pdf/1606.01865.pdf
 # https://pytorch.org/blog/optimizing-cuda-rnn-with-torchscript/
 # https://github.com/PeterChe1990/GRU-D/blob/master/nn_utils/grud_layers.py
+# https://github.com/sindhura97/STraTS
 
 
 import torch
