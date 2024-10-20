@@ -1,3 +1,6 @@
+# References:
+# https://github.com/sindhura97/STraTS
+
 import pickle
 import numpy as np
 from tqdm import tqdm
