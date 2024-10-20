@@ -78,7 +78,7 @@ class Dataset:
         if args.model_type in ['strats', 'istrats','new']:
             data = data.sample(frac=1)
             data = data.groupby('ts_id').head(args.max_obs)
-        elif args.model_type in ['grud', 'interpnet']:
+        elif args.model_type in ['grud']:
             timestamps = data[['ts_id','minute']].drop_duplicates().sample(frac=1)
             timestamps = timestamps.groupby('ts_id').head(args.max_timesteps)
             data = data.merge(timestamps, on=['ts_id','minute'], how='inner')
@@ -89,7 +89,7 @@ class Dataset:
             pt_var_path = os.path.join(os.path.dirname(args.load_ckpt_path), 
                                        'pt_saved_variables.pkl')
             variables, means_stds, max_minute = pickle.load(open(pt_var_path,'rb'))
-        if args.model_type in ['strats','istrats','new','grud','interpnet']:
+        if args.model_type in ['strats','istrats','new','grud']:
             if not(args.finetune):
                 means_stds = data.loc[data.ts_id.isin(train_ids)].groupby(
                                     'variable').agg({'value':['mean', 'std']})
@@ -108,7 +108,7 @@ class Dataset:
         self.var_to_ind_mapping = var_to_ind
         V = len(variables)
         args.V = V
-        if args.model_type in ['gru', 'tcn', 'sand']:
+        if args.model_type in ['gru']:
             # get hourly agg ts with missingness and time since last obs
             data['minute'] = data['minute'].apply(lambda x:max(1, int(np.ceil(x/60)))-1)
             T = data.minute.max()+1
@@ -148,12 +148,9 @@ class Dataset:
                 times[row.ts_ind].append(row.minute)
                 varis[row.ts_ind].append(var_to_ind[row.variable])
             self.values, self.times, self.varis = values, times, varis
-        elif args.model_type in ['grud','interpnet']:
+        elif args.model_type in ['grud']:
             if args.model_type=='grud':
                 deltas = [[] for i in range(N)]
-            elif args.model_type=='interpnet':
-                times = [[] for i in range(N)]
-                holdout_masks = [[] for i in range(N)]
             values = [[] for i in range(N)]
             mask = [[] for i in range(N)]
             for ts_ind, curr_data in data.groupby('ts_ind'):
@@ -172,32 +169,15 @@ class Dataset:
                         curr_delta[t,:] = curr_times[t]-curr_times[t-1] \
                                         + (1-curr_mask[t-1])*curr_delta[t-1,:]
                     deltas[ts_ind] = curr_delta/(24*60*60) # days
-                elif args.model_type=='interpnet':
-                    times[ts_ind] = list(np.array(curr_times)/60) # hours
-                    curr_mask[0,:] = 1
-                    hmask = np.copy(curr_mask)
-                    for j in range(args.V):
-                        obs_time_indices = np.argwhere(curr_mask[:,j]).reshape(-1)
-                        num_to_mask = int(0.2*len(obs_time_indices))
-                        if num_to_mask>0:
-                            to_mask = np.random.choice(obs_time_indices, num_to_mask, replace=False)
-                            hmask[to_mask,j] = 0
-                    holdout_masks[ts_ind] = hmask
                 values[ts_ind] = curr_values
                 mask[ts_ind] = curr_mask
             self.values, self.mask = values, mask
             if args.model_type=='grud':
                 self.deltas = deltas
-            elif args.model_type=='interpnet':
-                self.times = times
-                self.holdout_masks = holdout_masks
         
     def get_static_varis(self, dataset):
         if dataset=='mimic_iii':
             static_varis = ['Age', 'Gender','height']
-        elif dataset=='physionet_2012':
-            static_varis = ['Age', 'Gender', 'Height', 'ICUType_1',
-                            'ICUType_2', 'ICUType_3', 'ICUType_4']
         return static_varis
 
     def get_static_data(self, data):
@@ -207,28 +187,10 @@ class Dataset:
         data = data.loc[~static_ii] # remove static vars from data
         static_var_to_ind = {v:i for i,v in enumerate(self.static_varis)}
         D = len(static_var_to_ind)
-        if self.args.dataset=='physionet_2012':
-            D+=2
-            self.static_varis += ['Gender_missing', 'Height_missing']
         demo = np.zeros((self.N, D))
         for row in tqdm(static_data.itertuples()):
             var_ind = static_var_to_ind[row.variable]
             demo[row.ts_ind, var_ind] = row.value
-            if self.args.dataset=='physionet_2012':
-                if row.variable=='Gender':
-                    demo[row.ts_ind, D-2] = 1
-                elif row.variable=='Height':
-                    demo[row.ts_ind, D-1] = 1
-        # mean fill missing static values
-        if self.args.dataset=='physionet_2012':
-            static_data_train = static_data.loc[static_data.ts_ind.isin(self.splits['train'])]
-            gender_mean = static_data_train.loc[static_data_train.variable=='Gender']['value'].mean()
-            height_mean = static_data_train.loc[static_data_train.variable=='Height']['value'].mean()
-            del static_data_train
-            gender_mask = (1-demo[:,D-2]).astype(bool)
-            demo[gender_mask, static_var_to_ind['Gender']] = gender_mean
-            height_mask = (1-demo[:,D-1]).astype(bool)
-            demo[height_mask, static_var_to_ind['Height']] = height_mean
         # Normalize static data.
         train_ind = self.splits['train']
         means = demo[train_ind].mean(axis=0, keepdims=True)
@@ -246,11 +208,9 @@ class Dataset:
             ind = self.train_cycler.get_batch_ind()
         if self.args.model_type in ['strats', 'istrats','new']:
             return self.get_batch_strats(ind)
-        elif self.args.model_type=='grud':
+        elif self.args.model_type in ['grud']:
             return self.get_batch_grud(ind)
-        elif self.args.model_type=='interpnet':
-            return self.get_batch_interpnet(ind)
-        elif self.args.model_type in ['gru', 'tcn', 'sand']:
+        elif self.args.model_type in ['gru']:
             return {'ts':torch.FloatTensor(self.X[ind]),
                     'demo':torch.FloatTensor(self.demo[ind]), 
                     'labels':torch.FloatTensor(self.y[ind])}
@@ -264,9 +224,7 @@ class Dataset:
             return self.get_batch_strats(ind)
         elif self.args.model_type=='grud':
             return self.get_batch_grud(ind)
-        elif self.args.model_type=='interpnet':
-            return self.get_batch_interpnet(ind)
-        elif self.args.model_type in ['gru', 'tcn', 'sand']:
+        elif self.args.model_type in ['gru']:
             if perturb_feat is None:
                 return self.get_batch(ind)
             else:
@@ -317,28 +275,6 @@ class Dataset:
                 'seq_len':torch.LongTensor(num_timestamps),
                 'demo':torch.FloatTensor(self.demo[ind_clean]), 
                 'labels':torch.FloatTensor(self.y[ind_clean])}
-    
-    def get_batch_interpnet(self, ind):
-        times = [self.times[i] for i in ind]
-        values = [self.values[i] for i in ind]
-        masks = [self.mask[i] for i in ind]
-        hmasks = [self.holdout_masks[i] for i in ind]
-
-        num_timestamps = np.array(list(map(len, times)))
-        max_timestamps = max(num_timestamps)
-        pad_lens = max_timestamps-num_timestamps
-        V = self.args.V
-        pad_mats = [np.zeros((l,V)) for l in pad_lens]
-        hmasks = torch.FloatTensor(np.stack([np.concatenate((delta,pad), axis=0) 
-                                    for delta,pad in zip(hmasks,pad_mats)]))
-        values = torch.FloatTensor(np.stack([np.concatenate((delta,pad), axis=0) 
-                                    for delta,pad in zip(values,pad_mats)]))
-        masks = torch.FloatTensor(np.stack([np.concatenate((delta,pad), axis=0) 
-                                    for delta,pad in zip(masks,pad_mats)]))
-        times = torch.FloatTensor([t+[0]*p for t,p in zip(times, pad_lens)])
-        return {'t':times, 'x':values, 'm':masks, 'h':hmasks,
-                'demo':torch.FloatTensor(self.demo[ind]), 
-                'labels':torch.FloatTensor(self.y[ind])}
 
 
     def get_batch_strats(self, ind):
